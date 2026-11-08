@@ -1,93 +1,118 @@
 # pi-schedule
 
-One-off scheduled follow-ups for [Pi](https://pi.dev), in the original conversation.
+Schedule one-off follow-ups in your [Pi](https://pi.dev) conversation. Ask Pi to
+check CI later, or set a deadline yourself. Results appear in the same chat.
 
-## Start
+**Keep the Pi session open and the computer awake.** There is no background
+service, recurring schedule, or automatic retry.
 
-Supports macOS and Linux. Requires Pi 1.5.x, Node.js 22.18+, a persistent
-TUI/RPC session, and an awake computer. Pi extensions run with your user permissions; this is not a sandbox.
+## Install
 
-```sh
-make setup                 # locked dependencies + versioned Git hooks
-make try                   # isolated Pi load, without other extensions
-```
-
-When this repository is in `~/.pi/agent/extensions/pi-schedule`, Pi discovers its
-package manifest. Use **/reload** in an existing session. Otherwise install it:
+Requires Pi 1.5.x, Node.js 22.18+, and a persistent TUI or RPC session.
+Storage relies on Unix file permissions and filesystem behavior; use macOS or Linux.
+Pi extensions run with your user permissions, not in a sandbox.
 
 ```sh
-pi install /absolute/path/to/pi-schedule
+git clone https://github.com/carbon-ni/pi-schedule.git
+cd pi-schedule
+npm ci
+pi install "$PWD"
 ```
 
-## Schedule work
+Start Pi, or run `/reload` in an existing session. If the repository is already
+at `~/.pi/agent/extensions/pi-schedule`, Pi discovers it without `pi install`.
 
-Manual commands do not need a model call:
+## Schedule a follow-up
+
+Ask Pi with an exact target and a clear scope:
+
+> In 30 minutes, check CI for owner/repo#123 and report failures. Do not modify code.
+
+Pi confirms the task ID, due time with timezone, target, and cancellation command.
+It can schedule further checks needed for the current request, with a reason for
+each check. A status check does not authorize code changes, pushes, or merges.
+
+To schedule without a model call, use `/schedule`:
 
 ```text
 /schedule in 30m Check CI for owner/repo#123 and report failures; do not modify code
-/schedule at 2026-11-09T14:30:00+01:00 Check deployment status
+/schedule at 2026-11-09T14:30:00+01:00 Check deployment status for owner/repo
 /schedule list
+```
+
+Use an explicit timezone offset for `at`. Replace `S-<id>` below with the ID from
+the confirmation or task list:
+
+```text
 /schedule show S-<id>
 /schedule cancel S-<id>
 /schedule help
 ```
 
-Or ask Pi: **“In 30 minutes, check CI again.”** The agent resolves the exact
-target and calls `schedule_task`. It can also schedule a necessary follow-up
-when CI is still running, without asking each time. Each agent-created task
-explains why. The tool supports `create`, `list`, `show`, and `cancel`.
+Tasks wait while Pi is busy, messages are queued, or extension UI is blocking.
+They remain cancellable until dispatch starts. **Dispatched means Pi started the
+turn, not that the check succeeded.** Read the conversation for findings or blockers.
 
-Agent follow-ups share a default budget of **three agent-created checks within
-two hours**. Descendants cannot reset it or silently recreate a cancelled chain.
-A new explicit user request starts a new authorization scope. You can change
-a chain's total run limit and expiry from now with:
+## Recover missed work
+
+Closing Pi stops execution. Reloading or resuming keeps future tasks, but missed
+tasks become overdue. Sleep or forward-clock gaps over two minutes also require
+review; missed work does not run automatically.
+
+Inspect the saved request, then explicitly run overdue work when Pi is idle:
+
+```text
+/schedule show S-<id>
+/schedule run S-<id>
+```
+
+If dispatch is uncertain, inspect the conversation and any external effects first.
+Then acknowledge it without replay:
+
+```text
+/schedule dismiss S-<id>
+```
+
+Create a fresh task only if another check is needed. For storage or lock errors,
+follow [security and recovery](docs/SECURITY.md) before using `/reload`.
+
+Each confirmation includes `pi --session-id <id>` to resume from the same project.
+Use it if a task was scheduled before the first chat message: Pi creates session
+files lazily, so the session may not appear in the picker yet.
+
+## Control follow-up limits
+
+Agent-created checks share a default budget of **three checks within two hours**.
+Follow-ups cannot reset that budget or silently recreate a cancelled chain. A new
+explicit user request starts a new authorization scope.
+
+Only you can change a chain's total run limit and expiry from now:
 
 ```text
 /schedule budget S-<id> 5 3h
 ```
 
-Limits: 20 pending/overdue tasks, 8 KiB saved instructions, 1,000 history records
-per session. Explicit user budget controls allow up to 20 checks / 24 hours.
+An expired chain needs a budget extension before it can run. Maximum explicit
+budget: 20 checks within 24 hours. Each session allows 20 pending or overdue tasks,
+8 KiB per saved instruction, and 1,000 history records.
 
-## Execution and recovery
+For agent integrations, `schedule_task` supports `create`, `list`, `show`, and
+`cancel`. Creation requires an instruction, exact target, reason, and either
+`delay_seconds` or timezone-qualified `run_at`.
 
-- Confirmation includes task ID, local due time with timezone, target, creator,
-  cancellation command, and session-resume command.
-- A one-second timer checks absolute deadlines. Active agent work, queued
-  messages, and blocking extension UI take priority.
-- Tasks stay cancellable until dispatch starts. Dispatched means Pi started
-  the turn, **not** that the requested check succeeded. Findings appear in chat.
-- Closing Pi stops execution. Reload/resume keeps future tasks, but missed tasks
-  become overdue. Sleep/forward-clock gaps over two minutes also require review.
-  Small scheduling delays are tolerated; continuously observed busy work can
-  wait longer. No daemon, recurrence, automatic missed-run catch-up, or retries.
-- Inspect saved work before explicit recovery:
+## Local state
 
-```text
-/schedule show S-<id>
-/schedule run S-<id>         # overdue work, when idle
-```
+Tasks stay in `~/.pi/agent/schedule/`, or `<PI_CODING_AGENT_DIR>/schedule/` when
+Pi's agent directory is overridden. There is no separate scheduler configuration.
 
-An expired agent chain needs an explicit budget extension before it can run.
-An uncertain dispatch is never replayed automatically. Inspect the conversation,
-then `/schedule dismiss S-<id>` to acknowledge uncertainty without replaying it.
-If needed, create a fresh manual task after checking for prior effects.
+State files use mode 600; directories and locks use mode 700. Each session has one
+exclusive owner. Forked sessions get separate stores. Rewinding history does not
+restore cancelled or dispatched tasks. Corrupt state is retained for recovery;
+a write failure stops scheduling until reload.
 
-Pi creates new session files lazily. If you scheduled manually before the first
-ordinary chat message, use the confirmation's `pi --session-id <id>` from the
-same project to resume; the session may not appear in the picker yet.
+## Development
 
-## Private local state
-
-Tasks live in `<Pi agent directory>/schedule/`, default
-`~/.pi/agent/schedule/`. `PI_CODING_AGENT_DIR` changes the parent using Pi's
-standard configuration behavior. There is no second scheduler config file.
-
-State files are mode 600, directory/locks mode 700. One session owner holds an
-exclusive lock. A clone/fork gets its own store; rewinding history does not
-resurrect cancelled or dispatched tasks. Corrupt state stops scheduling without
-discarding the file. A write failure stops the runtime until reload.
-
-See [security and recovery](docs/SECURITY.md), [architecture](docs/ARCHITECTURE.md),
-and [development](DEVELOPMENT.md). The [design baseline](docs/PLAN.md) records
-the original requirements.
+See [development](DEVELOPMENT.md) for setup, isolated loading, and checks;
+[architecture](docs/ARCHITECTURE.md) for implementation boundaries;
+[security and recovery](docs/SECURITY.md) for permissions and failure handling;
+and [design baseline](docs/PLAN.md) for the original requirements.
