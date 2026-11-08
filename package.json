@@ -1,6 +1,6 @@
 {
   "name": "@carbon-ni/pi-schedule",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/carbon-ni/pi-schedule.git"
