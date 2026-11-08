@@ -1,5 +1,5 @@
 export type Creator = "user" | "agent";
-export type Status = "pending" | "uncertain" | "dispatched" | "cancelled";
+export type Status = "pending" | "uncertain" | "dispatched" | "cancelled" | "overdue";
 
 export interface Task {
   id: string;
@@ -27,6 +27,7 @@ export interface State {
   version: 1;
   tasks: Record<string, Task>;
   chains: Record<string, Chain>;
+  activeRootId?: string;
 }
 
 export interface CreateRequest {
@@ -92,7 +93,10 @@ function deadline(request: CreateRequest, now: number): number {
     }
     dueAt = now + request.delaySeconds * 1000;
   } else {
-    const match = /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.exec(request.runAt!);
+    const match =
+      /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.exec(
+        request.runAt!,
+      );
     if (!match) {
       throw new Error("runAt needs an ISO-8601 timestamp with seconds and timezone offset.");
     }
@@ -116,19 +120,21 @@ export function createTask(state: State, request: CreateRequest, ctx: CreateCont
   requireText(request.instruction, "Instruction");
   requireText(request.projectPath, "Project path");
   requireText(request.target, "Target");
-  if (Buffer.byteLength(request.instruction, "utf8") > MAX_INSTRUCTION_BYTES) {
+  if (new TextEncoder().encode(request.instruction).length > MAX_INSTRUCTION_BYTES) {
     throw new Error("Instruction must not exceed 8192 UTF-8 bytes.");
   }
   if (getOwn(state.tasks, ctx.id)) throw new Error("Task ID already exists.");
-  const pending = Object.values(state.tasks).filter(t =>
-    t.sessionId === ctx.sessionId && t.status === "pending");
-  if (pending.length >= MAX_PENDING) throw new Error("Limit of 20 pending tasks reached. Use /schedule list.");
+  const pending = Object.values(state.tasks).filter(
+    (t) => t.sessionId === ctx.sessionId && (t.status === "pending" || t.status === "overdue"),
+  );
+  if (pending.length >= MAX_PENDING)
+    throw new Error("Limit of 20 pending tasks reached. Use /schedule list.");
 
   const dueAt = deadline(request, ctx.now);
   if (ctx.creator === "agent") requireText(request.reason!, "Agent scheduling reason");
 
-  const parent = request.parentId === undefined
-    ? undefined : ownedTask(state, request.parentId, ctx.sessionId);
+  const parent =
+    request.parentId === undefined ? undefined : ownedTask(state, request.parentId, ctx.sessionId);
   if (parent && parent.status !== "dispatched") {
     throw new Error("Follow-up parent must have been dispatched.");
   }
@@ -136,12 +142,16 @@ export function createTask(state: State, request: CreateRequest, ctx: CreateCont
     throw new Error("Follow-up scope must match the original project and target.");
   }
   const rootId = parent?.rootId ?? ctx.id;
-  const chain = parent ? state.chains[rootId] : {
-    usedRuns: 0, maxRuns: MAX_AGENT_RUNS,
-    expiresAt: ctx.now + CHAIN_LIFETIME_MS, cancelled: false,
-  };
+  const chain = parent
+    ? state.chains[rootId]
+    : {
+        usedRuns: 0,
+        maxRuns: MAX_AGENT_RUNS,
+        expiresAt: ctx.now + CHAIN_LIFETIME_MS,
+        cancelled: false,
+      };
   if (chain.cancelled) throw new Error("Follow-up chain is cancelled.");
-  if (parent && pending.some(t => t.rootId === rootId)) {
+  if (parent && pending.some((t) => t.rootId === rootId)) {
     throw new Error("This chain already has a pending follow-up. Use /schedule list.");
   }
   const consumesBudget = ctx.creator === "agent" || parent !== undefined;
@@ -153,26 +163,38 @@ export function createTask(state: State, request: CreateRequest, ctx: CreateCont
   }
 
   const task: Task = {
-    id: ctx.id, sessionId: ctx.sessionId, creator: ctx.creator,
-    instruction: request.instruction, projectPath: request.projectPath, target: request.target,
-    reason: request.reason, parentId: request.parentId, rootId,
-    createdAt: ctx.now, dueAt, status: "pending",
+    id: ctx.id,
+    sessionId: ctx.sessionId,
+    creator: ctx.creator,
+    instruction: request.instruction,
+    projectPath: request.projectPath,
+    target: request.target,
+    reason: request.reason,
+    parentId: request.parentId,
+    rootId,
+    createdAt: ctx.now,
+    dueAt,
+    status: "pending",
   };
   return {
     ...state,
     tasks: { ...state.tasks, [task.id]: task },
-    chains: { ...state.chains, [rootId]: {
-      ...chain, usedRuns: chain.usedRuns + Number(consumesBudget),
-    } },
+    chains: {
+      ...state.chains,
+      [rootId]: {
+        ...chain,
+        usedRuns: chain.usedRuns + Number(consumesBudget),
+      },
+    },
   };
 }
 
 export function dueTasks(state: State, now: number, sessionId: string): Task[] {
   requireTime(now);
   return Object.values(state.tasks)
-    .filter(t => t.sessionId === sessionId && t.status === "pending" && t.dueAt <= now)
+    .filter((t) => t.sessionId === sessionId && t.status === "pending" && t.dueAt <= now)
     .sort((a, b) => a.dueAt - b.dueAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map(t => ({ ...t }));
+    .map((t) => ({ ...t }));
 }
 
 export function cancelTask(state: State, id: string, sessionId: string): State {
@@ -182,13 +204,18 @@ export function cancelTask(state: State, id: string, sessionId: string): State {
   }
   const tasks = { ...state.tasks };
   for (const candidate of Object.values(tasks)) {
-    if (candidate.rootId === task.rootId && candidate.status === "pending") {
+    if (
+      candidate.rootId === task.rootId &&
+      (candidate.status === "pending" || candidate.status === "overdue")
+    ) {
       tasks[candidate.id] = { ...candidate, status: "cancelled" };
     }
   }
-  return { ...state, tasks, chains: { ...state.chains,
-    [task.rootId]: { ...state.chains[task.rootId], cancelled: true },
-  } };
+  return {
+    ...state,
+    tasks,
+    chains: { ...state.chains, [task.rootId]: { ...state.chains[task.rootId], cancelled: true } },
+  };
 }
 
 /** Persist this returned intent before delivery; never automatically replay it. */
@@ -199,7 +226,10 @@ export function beginDispatch(state: State, id: string, sessionId: string, now: 
     throw new Error("Task must be pending and due before dispatch.");
   }
   const chain = state.chains[task.rootId];
-  if (chain.cancelled || ((task.creator === "agent" || task.parentId !== undefined) && now >= chain.expiresAt)) {
+  if (
+    chain.cancelled ||
+    ((task.creator === "agent" || task.parentId !== undefined) && now >= chain.expiresAt)
+  ) {
     throw new Error("Follow-up chain is cancelled or expired. Report unresolved work to the user.");
   }
   return { ...state, tasks: { ...state.tasks, [id]: { ...task, status: "uncertain" } } };

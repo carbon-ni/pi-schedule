@@ -1,0 +1,23 @@
+on:
+  socket: .tmp/funzzy.sock
+  change:
+    - ".github/**"
+    - ".githooks/**"
+    - ".watch.yaml"
+    - "fixtures/**"
+    - "src/**"
+    - "scripts/**"
+    - "package.json"
+    - "package-lock.json"
+    - "tsconfig.json"
+    - "eslint.config.js"
+    - "Makefile"
+  ignore:
+    - "**/.pi/**"
+    - "node_modules/**"
+    - "coverage/**"
+    - ".tmp/**"
+tasks:
+  - name: normal gate @quick @agent-final
+    run: make --no-print-directory check
+    run_on_init: true

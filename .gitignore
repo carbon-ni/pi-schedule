@@ -3,3 +3,5 @@ coverage/
 .direnv/
 result
 .tmp/
+**/.pi/
+!.watch.yaml

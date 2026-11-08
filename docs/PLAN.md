@@ -1,18 +1,15 @@
----
-id: TASK-0007
-title: Add session-scoped scheduled follow-ups
-status: doing
-depends_on: []
-priority: normal
-tags: [pi, scheduling]
----
+# Scheduling design baseline
 
-# Add session-scoped scheduled follow-ups
+> Original design for TASK-0007, captured 2026-11-08. This is not the task board.
+> README and DEVELOPMENT describe implemented behavior and verification; the
+> historical criteria below preserve the design intent, not live progress.
 
 ## Problem
+
 Waiting for CI, deployments, or another external operation requires the user to remember to return and ask Pi to check again. Long-running shell sleeps hide this intent, occupy execution, and cannot provide reliable listing, cancellation, or recovery.
 
 ## Decision
+
 Build `pi-schedule`, a Pi extension for one-off follow-ups in the original session. The user explicitly selected session-open execution as the MVP. This is a plan, not an active schedule.
 
 Example: “In 30 minutes check CI again.” Pi resolves the relevant repository and PR, records the action, and confirms its ID and exact local due time with timezone. At the due time it initiates a normal Pi turn in that session. Scheduling must not merely display a reminder.
@@ -20,9 +17,11 @@ Example: “In 30 minutes check CI again.” Pi resolves the relevant repository
 No daemon, cron, external service, spawned Pi process, recurring schedules, worktrees, or cross-session delivery in v1. No intray dependency: this runs inside the target session.
 
 ## Reference
+
 [Codex scheduled tasks](https://developers.openai.com/codex/app/automations), accessed 2026-11-08, documents in-chat scheduling, standalone runs, reviewable results, and the requirement to keep the computer and app running for local projects. Borrow explicit action + schedule + destination + visible result, not its full automation platform. The current page is titled “Scheduled tasks | ChatGPT Learn”; product naming has changed.
 
 ## User contract
+
 - Natural language is interpreted by the agent into structured tool input. The scheduler validates inputs deterministically; it does not use an LLM to decide whether work is due.
 - Both manual and agent-initiated scheduling are first-class. The user may schedule directly through a command or natural language. The agent may schedule a follow-up without asking each time when it is necessary to finish the current authorized task (e.g. CI is still running). This is not permission to invent unrelated monitoring or new work.
 - Agent-created tasks must visibly explain why a follow-up is needed, show their due time and target, and remain listable/cancellable. User cancellation stops that follow-up chain; the agent must not silently recreate it. Scheduling does not extend the original action permissions.
@@ -36,6 +35,7 @@ No daemon, cron, external service, spawned Pi process, recurring schedules, work
 - Show pending count/next due time and visible task lifecycle records. Distinguish scheduled, due/waiting, dispatched, cancelled, overdue, and uncertain. Do not claim a check succeeded merely because a prompt was submitted.
 
 ## Timing and lifecycle
+
 1. Persist creation before acknowledging it; timer is only a wake-up mechanism. Compare absolute UTC deadlines on every wake, with bounded periodic rechecks to handle clock changes and sleep.
 2. Dispatch only when the original session is idle, with no pre-existing queued user work. Recheck eligibility immediately before dispatch. Keep due work in the scheduler until then so cancellation remains meaningful; do not insert uncancellable messages behind an active turn.
 3. Order simultaneous due tasks by due time then stable ID. Run one at a time and recheck session/user queue state between runs. Use non-steering delivery defensively; verify actual Pi queue semantics in a spike before implementation.
@@ -46,6 +46,7 @@ No daemon, cron, external service, spawned Pi process, recurring schedules, work
 8. Closing Pi stops execution. Starting another session does not run old tasks. Pending records remain available when the original session is resumed. The feature cannot wake a sleeping computer.
 
 ## Design
+
 Keep changes under `pi/agent/extensions/pi-schedule/`, following nearby package conventions and current `@earendil-works/*` imports.
 
 Separate deterministic task validation/state transitions from Pi lifecycle and tool/command adapters. Inject clock, timer, persistence, and delivery at the boundary; avoid building a generic workflow framework.
@@ -57,12 +58,14 @@ First investigate whether session custom entries (`pi.appendEntry`) can provide 
 Pi integration evidence: `pi.sendUserMessage` initiates a turn when idle and supports `deliverAs: "followUp"` while streaming. `session_start`/`session_shutdown` cover reload and session replacement. Existing `pi-auto` exercises queued messages; `pi-intray` handles cross-process messages but is unnecessary here. Exact API behavior and compatibility must be checked before implementation; no harness changes are proposed.
 
 ## Delivery plan (test first)
+
 1. **Prove the boundary:** inspect current Pi docs/examples in full as needed; spike idle/queued-user semantics, session identity, forks, persistence replay, and duplicate session ownership. Finalize storage and delivery policy before coding the scheduler.
 2. **Implement deterministic core:** fake-clock tests first for validation, due ordering, cancellation, state transitions, overdue classification, and crash recovery. Add persistence adapter and ownership handling.
 3. **Wire Pi:** expose tools/commands, lifecycle cleanup, idle dispatch, and visible task state. Test adapters with fake Pi events; include integration checks for session replacement and reload.
 4. **Verify user flow:** short real-session timer checks CI in the same conversation; cancel prevents dispatch; active work is not interrupted; close/resume yields an overdue task without execution. Document help, prerequisites, recovery commands, storage, and limitations.
 
 ## Acceptance criteria
+
 - [ ] Direct manual commands and natural-language requests create durable tasks through the same validated scheduling logic, with resolved target and exact due-time confirmation; no shell sleep or background process.
 - [ ] The agent can schedule a necessary follow-up to the current task without per-task approval, with visible reason and creator attribution; unrelated work remains outside scope.
 - [ ] Agent-created follow-ups share a bounded run budget and expiry across descendants. Cancellation, exhausted budget, and expiry prevent silent recreation; tests cover both allowed follow-ups and rejected scope/budget expansion.
@@ -77,4 +80,5 @@ Pi integration evidence: `pi.sendUserMessage` initiates a turn when idle and sup
 - [ ] Manual short-timer smoke check and focused regression checks pass; no full repository check is required for planning.
 
 ## Future scope (not committed)
+
 General recurring schedules beyond bounded current-task follow-ups; standalone/background execution; results inbox; OS notifications. Each requires its own lifecycle and authorization design.
