@@ -49,7 +49,7 @@ test("npm package contains the Pi entrypoint and runtime but excludes tests and 
     timeout: 30_000,
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  const [archive] = JSON.parse(result.stdout) as { files: { path: string }[] }[];
+  const [archive] = JSON.parse(result.stdout);
   const paths = archive.files.map((file) => file.path);
 
   assert.ok(paths.includes("src/index.ts"));
