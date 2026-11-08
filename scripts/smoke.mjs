@@ -271,6 +271,20 @@ try {
   assert.ok(list.message.includes("[pending]"));
   console.log("PASS real runtime reload preserves pending task");
 
+  const beforeRewind = requests;
+  await client.prompt("/smoke-rewind");
+  from = client.records.length;
+  await client.prompt("/schedule list");
+  const rewound = await client.notice(futureId, from);
+  assert.ok(
+    rewound.message
+      .split("\n")
+      .find((line) => line.includes(cancelledId))
+      .includes("[cancelled]"),
+  );
+  assert.equal(requests, beforeRewind);
+  console.log("PASS history rewind preserves cancellations and does not replay work");
+
   const original = await client.command("get_state");
   await client.command("clone");
   const forked = await client.command("get_state");
