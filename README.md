@@ -22,6 +22,12 @@ pi install "$PWD"
 Start Pi, or run `/reload` in an existing session. If the repository is already
 at `~/.pi/agent/extensions/pi-schedule`, Pi discovers it without `pi install`.
 
+After the first npm release, install without cloning:
+
+```sh
+pi install npm:@carbon-ni/pi-schedule
+```
+
 ## Schedule a follow-up
 
 Ask Pi with an exact target and a clear scope:
@@ -113,6 +119,7 @@ a write failure stops scheduling until reload.
 ## Development
 
 See [development](DEVELOPMENT.md) for setup, isolated loading, and checks;
+[releasing](docs/RELEASING.md) for npm setup and publishing;
 [architecture](docs/ARCHITECTURE.md) for implementation boundaries;
 [security and recovery](docs/SECURITY.md) for permissions and failure handling;
 and [design baseline](docs/PLAN.md) for the original requirements.

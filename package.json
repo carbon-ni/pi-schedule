@@ -1,7 +1,19 @@
 {
-  "name": "pi-schedule",
+  "name": "@carbon-ni/pi-schedule",
   "version": "0.0.1",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carbon-ni/pi-schedule.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "scheduler"
+  ],
   "type": "module",
   "description": "Session-scoped scheduled follow-ups for Pi",
   "packageManager": "npm@10.9.9",
@@ -12,6 +24,7 @@
   },
   "files": [
     "src/**/*.ts",
+    "!src/**/*.test.ts",
     "README.md",
     "DEVELOPMENT.md",
     "docs"

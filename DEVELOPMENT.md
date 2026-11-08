@@ -28,11 +28,14 @@ exactly `true`. Failure prints `false` first, then at most 40 diagnostic lines.
 Hooks strip Git redirect variables so scratch repositories cannot touch the
 submodule index. Commit subjects follow Conventional Commits.
 
-CI invokes the same normal gate on main pushes and pull requests. Semver
-`v*` tags additionally invoke the local release gate; no publishing or tag
-creation is automatic. Review the package dry run before publishing. Pi is a
-host peer dependency; TypeBox is also host-provided. Development versions and
-direct tooling are pinned; the lockfile pins their dependency graph.
+CI invokes the same normal gate on main pushes and pull requests. Pushing a stable
+`v<version>` tag runs the release gate, then publishes `@carbon-ni/pi-schedule` to
+npm through trusted publishing. Tag creation is manual. See [releasing](docs/RELEASING.md)
+for initial npm setup, copyable release commands, and failure recovery.
+
+Review the package dry run before publishing. Pi is a host peer dependency;
+TypeBox is also host-provided. Development versions and direct tooling are
+pinned; the lockfile pins their dependency graph.
 
 ## Definition of done
 

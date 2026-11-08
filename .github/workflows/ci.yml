@@ -3,7 +3,6 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ["v*"]
 permissions:
   contents: read
 jobs:
@@ -19,5 +18,3 @@ jobs:
       - run: npm install --global npm@10.9.9
       - run: npm ci
       - run: make --no-print-directory check
-      - if: startsWith(github.ref, 'refs/tags/v')
-        run: make release-check
