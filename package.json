@@ -1,0 +1,19 @@
+{
+  "name": "pi-schedule",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Session-scoped scheduled follow-ups for Pi (core under development)",
+  "scripts": {
+    "test": "node --experimental-strip-types --test src/scheduler.test.ts",
+    "test:coverage": "node --experimental-strip-types --experimental-test-coverage --test src/scheduler.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~6.0.3"
+  }
+}
