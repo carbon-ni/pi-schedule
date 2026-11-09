@@ -1,7 +1,10 @@
 # pi-schedule
 
-Schedule one-off follow-ups in your [Pi](https://pi.dev) conversation. Ask Pi to
-check CI later, or set a deadline yourself. Results appear in the same chat.
+Let your [Pi](https://pi.dev) agents create reminders for themselves.
+
+CI still running? Deployment not ready? Your agent can schedule a reminder to
+check again, then return to the task in the same conversation. You do not need
+to keep prompting it to follow up.
 
 **Keep the Pi session open and the computer awake.** There is no background
 service, recurring schedule, or automatic retry.
@@ -28,17 +31,29 @@ After the first npm release, install without cloning:
 pi install npm:@carbon-ni/pi-schedule
 ```
 
-## Schedule a follow-up
+## Let the agent remind itself
 
-Ask Pi with an exact target and a clear scope:
+Give Pi a task with an exact target and a clear scope:
+
+> Check CI for owner/repo#123. If it is still running, remind yourself to check
+> again in 30 minutes and report failures. Do not modify code.
+
+The agent uses `schedule_task` to save a reminder and resume the check later.
+It can also create reminders when a follow-up is necessary for the current task,
+without asking you each time. Each reminder includes a reason, task ID, due time
+with timezone, target, and cancellation command. Results appear in the same chat.
+
+Reminders stay within the current request and permissions. A status check does
+not authorize code changes, pushes, or merges. Follow-up limits prevent an
+unbounded chain of reminders.
+
+## Schedule a reminder yourself
+
+You can also ask Pi directly:
 
 > In 30 minutes, check CI for owner/repo#123 and report failures. Do not modify code.
 
-Pi confirms the task ID, due time with timezone, target, and cancellation command.
-It can schedule further checks needed for the current request, with a reason for
-each check. A status check does not authorize code changes, pushes, or merges.
-
-To schedule without a model call, use `/schedule`:
+Or schedule without a model call using `/schedule`:
 
 ```text
 /schedule in 30m Check CI for owner/repo#123 and report failures; do not modify code
